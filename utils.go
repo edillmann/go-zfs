@@ -130,16 +130,16 @@ func unescapeFilepath(path string) (string, error) {
 	llen := len(path)
 	for i := 0; i < llen; {
 		if path[i] == '\\' {
-			if llen < i+4 {
+			if llen < i+5 {
 				return "", fmt.Errorf("Invalid octal code: too short")
 			}
-			octalCode := path[(i + 1):(i + 4)]
+			octalCode := path[(i + 1):(i + 5)]
 			val, err := strconv.ParseUint(octalCode, 8, 8)
 			if err != nil {
 				return "", fmt.Errorf("Invalid octal code: %v", err)
 			}
 			buf = append(buf, byte(val))
-			i += 4
+			i += 5
 		} else {
 			buf = append(buf, path[i])
 			i++
