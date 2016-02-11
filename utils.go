@@ -1,7 +1,6 @@
 package zfs
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,46 +9,89 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
 	"github.com/pborman/uuid"
+	"bytes"
+	"golang.org/x/crypto/ssh"
 )
 
 type command struct {
+	zh *ZfsH
+	Path string
+	Env []string
 	Command string
-	Stdin   io.Reader
-	Stdout  io.Writer
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+	stdout bytes.Buffer
+	stderr bytes.Buffer
+}
+
+type waitable interface {
+	Wait() error
+}
+
+func (cmd *command) LocalPrepare(arg ...string) (*exec.Cmd) {
+
+	lcmd := exec.Command(cmd.Command, arg...)
+
+	if cmd.Stdout == nil {
+		lcmd.Stdout = &cmd.stdout
+	} else {
+		lcmd.Stdout = cmd.Stdout
+	}
+
+	if cmd.Stdin != nil {
+		lcmd.Stdin = cmd.Stdin
+
+	}
+	if cmd.Stderr == nil {
+		lcmd.Stderr = &cmd.stderr
+	} else {
+		lcmd.Stderr = cmd.Stderr
+	}
+	return lcmd
 }
 
 func (c *command) Run(arg ...string) ([][]string, error) {
 
-	cmd := exec.Command(c.Command, arg...)
+	var err error
+	var cmd waitable
+	var session *ssh.Session
 
-	var stdout, stderr bytes.Buffer
-
-	if c.Stdout == nil {
-		cmd.Stdout = &stdout
-	} else {
-		cmd.Stdout = c.Stdout
-	}
-
-	if c.Stdin != nil {
-		cmd.Stdin = c.Stdin
-
-	}
-	cmd.Stderr = &stderr
-
+	joinedArgs := strings.Join(arg, " ")
+	c.Path = c.Command+" "+joinedArgs
+	c.Env = []string{"LC_CTYPE=C", "LANG=en_US.UTF-8"}
 	id := uuid.New()
-	joinedArgs := strings.Join(cmd.Args, " ")
+	logger.Log([]string{"ID:" + id, "START", c.Path})
+	if (c.zh.Local) {
+		lcmd := c.LocalPrepare(arg...)
+		err = lcmd.Start()
+		cmd = lcmd
+	} else {
+		err, session = c.StartCommand()
+		if (session != nil) {
+			defer func() {
+				session.Close()
+			}()
+		}
+		cmd = session
+	}
 
-	logger.Log([]string{"ID:" + id, "START", joinedArgs})
-	err := cmd.Run()
-	logger.Log([]string{"ID:" + id, "FINISH"})
+	logger.Log([]string{"ID:" + id, "DONE"})
 
 	if err != nil {
 		return nil, &Error{
 			Err:    err,
-			Debug:  strings.Join([]string{cmd.Path, joinedArgs}, " "),
-			Stderr: stderr.String(),
+			Debug:  strings.Join([]string{c.Command, joinedArgs}, " "),
+			Stderr: c.stderr.String(),
+		}
+	}
+
+	if err = cmd.Wait(); err != nil {
+		return nil, &Error{
+			Err:    err,
+			Stderr: c.stderr.String(),
+			Debug:  strings.Join([]string{c.Command, joinedArgs}, " "),
 		}
 	}
 
@@ -58,8 +100,7 @@ func (c *command) Run(arg ...string) ([][]string, error) {
 		return nil, nil
 	}
 
-	lines := strings.Split(stdout.String(), "\n")
-
+	lines := strings.Split(c.stdout.String(), "\n")
 	//last line is always blank
 	lines = lines[0 : len(lines)-1]
 	output := make([][]string, len(lines))
@@ -67,8 +108,8 @@ func (c *command) Run(arg ...string) ([][]string, error) {
 	for i, l := range lines {
 		output[i] = strings.Fields(l)
 	}
+	return output, err
 
-	return output, nil
 }
 
 func setString(field *string, value string) {
@@ -259,13 +300,16 @@ func parseInodeChanges(lines [][]string) ([]*InodeChange, error) {
 	return changes, nil
 }
 
-func listByType(t, filter string) ([]*Dataset, error) {
+func (z *ZfsH) listByType(t, filter string, depth int) ([]*Dataset, error) {
 	args := []string{"list", "-rH", "-t", t, "-o", strings.Join(DsPropList, ",")}
 
+	if depth > 0 {
+		args = append(args, "-d", strconv.Itoa(depth))
+	}
 	if filter != "" {
 		args = append(args, filter)
 	}
-	out, err := zfs(args...)
+	out, err := z.zfs(args...)
 	if err != nil {
 		return nil, err
 	}
