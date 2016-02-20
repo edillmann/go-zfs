@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"testing"
 	"time"
-	zfs "github.com/amitkris/go-zfs"
+	zfs "github.com/edillmann/go-zfs"
 	"strconv"
 )
 
@@ -267,7 +267,7 @@ func TestSendSnapshot(t *testing.T) {
 		ok(t, err)
 		defer os.Remove(file.Name())
 
-		err = zh.SendSnapshot(s.Name, "", file, zfs.SendDefault)
+		err = zh.SendSnapshot(s.Name, "", file, zfs.SendDefault, "")
 		ok(t, err)
 
 		ok(t, zh.Destroy(s, zfs.DestroyDefault))
