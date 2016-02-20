@@ -146,6 +146,8 @@ func NewSSHHandle(host string, port int, username string, keyfile *string) *ZfsH
 	if (keyfile == nil) {
 		usr, _ := user.Current()
 		zh.keyfile = usr.HomeDir + "/.ssh/id_dsa"
+	} else {
+		zh.keyfile = *keyfile
 	}
 
 	return zh;
