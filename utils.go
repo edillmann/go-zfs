@@ -303,7 +303,7 @@ func parseInodeChanges(lines [][]string) ([]*InodeChange, error) {
 func (z *ZfsH) listByType(t, filter string, depth int) ([]*Dataset, error) {
 	args := []string{"list", "-rH", "-t", t, "-o", strings.Join(DsPropList, ",")}
 
-	if depth > 0 {
+	if depth > -1 {
 		args = append(args, "-d", strconv.Itoa(depth))
 	}
 	if filter != "" {
