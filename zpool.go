@@ -55,16 +55,6 @@ func (z *ZfsH) GetZpool(name string) (*Zpool, error) {
 	return zp, nil
 }
 
-// Datasets returns a slice of all ZFS datasets in a zpool.
-func (z *ZfsH) ZpoolDatasets(zp *Zpool) ([]*Dataset, error) {
-	return z.Datasets(zp.Name, 0)
-}
-
-// Snapshots returns a slice of all ZFS snapshots in a zpool.
-func (z *ZfsH) ZpoolSnapshots(zp *Zpool) ([]*Dataset, error) {
-	return z.SnapshotsByName(zp.Name, -1)
-}
-
 // CreateZpool creates a new ZFS zpool with the specified name, properties,
 // and optional arguments.
 // A full list of available ZFS properties and command-line arguments may be
