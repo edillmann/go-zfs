@@ -17,9 +17,11 @@ const (
 	DatasetFilesystem = "filesystem"
 	DatasetSnapshot   = "snapshot"
 	DatasetVolume     = "volume"
+	DatasetBookmark   = "bookmark"
+	DatasetAll        = "all"
 )
 
-// Dataset is a ZFS dataset.  A dataset could be a clone, filesystem, snapshot,
+// Dataset is a ZFS dataset.  A dataset could be a clone, filesystem, snapshot, bookmark
 // or volume.  The Type struct member can be used to determine a dataset's type.
 //
 // The field definitions can be found in the ZFS manual:
@@ -118,7 +120,7 @@ func SetLogger(l Logger) {
 }
 
 // zfs handle used to redirect command
-// to local or remote host (ex over ssh)
+// to local or remote host over ssh
 type ZfsH struct {
 	Local    bool
 	host     string
@@ -178,29 +180,29 @@ func (z *ZfsH) zfs(arg ...string) ([][]string, error) {
 // Datasets returns a slice of ZFS datasets, regardless of type.
 // A filter argument may be passed to select a dataset with the matching name,
 // or empty string ("") may be used to select all datasets.
-func (z *ZfsH) Datasets(filter string, depth int) ([]*Dataset, error) {
-	return z.listByType("all", filter, depth)
+func (z *ZfsH) Datasets(datasettype string, filter string, depth int, recurse bool) ([]*Dataset, error) {
+	return z.listByType(datasettype, filter, depth, recurse)
 }
 
 // Snapshots returns a slice of ZFS snapshots.
 // A filter argument may be passed to select a snapshot with the matching name,
 // or empty string ("") may be used to select all snapshots.
 func (z *ZfsH) SnapshotsByName(filter string, depth int) ([]*Dataset, error) {
-	return z.listByType(DatasetSnapshot, filter, depth)
+	return z.listByType(DatasetSnapshot, filter, depth, true)
 }
 
 // Filesystems returns a slice of ZFS filesystems.
 // A filter argument may be passed to select a filesystem with the matching name,
 // or empty string ("") may be used to select all filesystems.
-func (z *ZfsH)  Filesystems(filter string, depth int) ([]*Dataset, error) {
-	return z.listByType(DatasetFilesystem, filter, depth)
+func (z *ZfsH) Filesystems(filter string, depth int) ([]*Dataset, error) {
+	return z.listByType(DatasetFilesystem, filter, depth, false)
 }
 
 // Volumes returns a slice of ZFS volumes.
 // A filter argument may be passed to select a volume with the matching name,
 // or empty string ("") may be used to select all volumes.
 func (z *ZfsH) Volumes(filter string, depth int) ([]*Dataset, error) {
-	return z.listByType(DatasetVolume, filter, depth)
+	return z.listByType(DatasetVolume, filter, depth, false)
 }
 
 // GetDataset retrieves a single ZFS dataset by name.  This dataset could be
@@ -223,7 +225,7 @@ func (z *ZfsH) GetDataset(name string) (*Dataset, error) {
 
 // Clone clones a ZFS snapshot and returns a clone dataset.
 // An error will be returned if the input dataset is not of snapshot type.
-func (z *ZfsH)  Clone(d *Dataset,dest string, properties map[string]string) (*Dataset, error) {
+func (z *ZfsH) Clone(d *Dataset,dest string, properties map[string]string) (*Dataset, error) {
 	if d.Type != DatasetSnapshot {
 		return nil, errors.New("can only clone snapshots")
 	}
@@ -284,7 +286,9 @@ func (z *ZfsH) Mount(d *Dataset, overlay bool, options []string) (*Dataset, erro
 // ReceiveSnapshot receives a ZFS stream from the input io.Reader, creates a
 // new snapshot with the specified name, and streams the input data into the
 // newly-created snapshot.
-func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, alternatecommand string) (*Dataset, error) {
+// name destination dataset name
+// uncompress uncompress prog if != "" (ex. lzop -d)
+func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string) (*Dataset, error) {
 
 	c := command{
 		Command: "zfs",
@@ -292,8 +296,8 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, alternatecommand string) (
 		zh: z,
 	}
 
-	if alternatecommand != "" {
-		c.Command = alternatecommand
+	if uncompress != "" {
+		c.Command = uncompress+"|zfs"
 	}
 
 	_, err := c.Run("receive", name)
@@ -307,7 +311,8 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, alternatecommand string) (
 // An error will be returned if the input dataset is not of snapshot type.
 // ds0 source snapshot
 // ds1 previous snapshot used when sendflags is SendIncremental
-func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFlag, alternatecommand string) error {
+// compression prog to pipe through if != "" (ex. lzop)
+func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFlag, compress string) error {
 	if !strings.ContainsAny(ds0, "@") {
 		return errors.New("can only send snapshots")
 	}
@@ -316,10 +321,6 @@ func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFla
 		Command: "zfs",
 		Stdout: output,
 		zh: z,
-	}
-
-	if alternatecommand != "" {
-		c.Command = alternatecommand
 	}
 
 	args := make([]string, 1,5)
@@ -336,6 +337,11 @@ func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFla
 		args = append(args, "-I", ds1)
 	}
 	args = append(args, ds0)
+
+	if compress != "" {
+		args = append(args, "|", compress)
+	}
+
 	_, err := c.Run(args...)
 	return err
 }

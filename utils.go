@@ -300,12 +300,17 @@ func parseInodeChanges(lines [][]string) ([]*InodeChange, error) {
 	return changes, nil
 }
 
-func (z *ZfsH) listByType(t, filter string, depth int) ([]*Dataset, error) {
-	args := []string{"list", "-rH", "-t", t, "-o", strings.Join(DsPropList, ",")}
+func (z *ZfsH) listByType(t, filter string, depth int, recurse bool) ([]*Dataset, error) {
+	args := []string{"list", "-H", "-t", t, "-o", strings.Join(DsPropList, ",")}
 
 	if depth > 0 {
 		args = append(args, "-d", strconv.Itoa(depth))
 	}
+
+	if recurse {
+		args = append(args, "-r")
+	}
+
 	if filter != "" {
 		args = append(args, filter)
 	}
