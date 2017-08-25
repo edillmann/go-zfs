@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"regexp"
 	"golang.org/x/crypto/ssh"
 	"os/user"
 )
@@ -87,6 +88,9 @@ const (
 	SendDefault	       SendFlag = 1 << iota
 	SendIncremental 		= 1 << iota
 	SendRecursive 			= 1 << iota
+	SendIntermediate 		= 1 << iota
+	SendLz4		 		= 1 << iota
+	SendEmbeddedData		= 1 << iota
 )
 
 // InodeChange represents a change as reported by Diff
@@ -128,7 +132,12 @@ type ZfsH struct {
 	username string
 	password string
 	keyfile  string
+	lz4Send  bool
 	client   *ssh.Client
+}
+
+func (z *ZfsH) Lz4Send() bool {
+	return z.lz4Send
 }
 
 func NewLocalHandle() *ZfsH {
@@ -162,6 +171,15 @@ func (d *Dataset) SnapshotName() string {
 	return ""
 }
 
+func (z *ZfsH) TestLz4SendSupport() {
+	_, err := z.zfs("send","--help")
+	if err != nil {
+		zerr := err.(*Error)
+		match, _ := regexp.MatchString("send \\[-.*c.*] \\[-\\[i", zerr.Stderr)
+		z.lz4Send = match
+	}
+}
+
 func (z *ZfsH) Close() {
 	if (z.client != nil) {
 		z.client.Close()
@@ -191,6 +209,13 @@ func (z *ZfsH) SnapshotsByName(filter string, depth int) ([]*Dataset, error) {
 	return z.listByType(DatasetSnapshot, filter, depth, true)
 }
 
+// Bookmarks returns a slice of ZFS bookmarks.
+// A filter argument may be passed to select a bookmark with the matching name,
+// or empty string ("") may be used to select all bookmarks.
+func (z *ZfsH) BookmarksByName(filter string, depth int) ([]*Dataset, error) {
+	return z.listByType(DatasetBookmark, filter, depth, true)
+}
+
 // Filesystems returns a slice of ZFS filesystems.
 // A filter argument may be passed to select a filesystem with the matching name,
 // or empty string ("") may be used to select all filesystems.
@@ -206,7 +231,7 @@ func (z *ZfsH) Volumes(filter string, depth int) ([]*Dataset, error) {
 }
 
 // GetDataset retrieves a single ZFS dataset by name.  This dataset could be
-// any valid ZFS dataset type, such as a clone, filesystem, snapshot, or volume.
+// any valid ZFS dataset type, such as a clone, filesystem, snapshot, bookmark or volume.
 func (z *ZfsH) GetDataset(name string) (*Dataset, error) {
 	out, err := z.zfs("list", "-Hp", "-o", strings.Join(DsPropList, ","), name)
 	if err != nil {
@@ -330,11 +355,23 @@ func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFla
 		args = append(args, "-R")
 	}
 
+	if sendflags&SendLz4 != 0 {
+		args = append(args, "-c")
+	}
+
+	if sendflags&SendEmbeddedData != 0 {
+		args = append(args, "-e")
+	}
+
 	if sendflags&SendIncremental != 0 {
 		if ds1 == "" {
 			return errors.New("Source snapshot must be set for incremental send")
 		}
-		args = append(args, "-I", ds1)
+		if sendflags&SendIntermediate != 0 {
+			args = append(args, "-I", ds1)
+		} else {
+			args = append(args, "-i", ds1)
+		}
 	}
 	args = append(args, ds0)
 

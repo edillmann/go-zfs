@@ -32,7 +32,15 @@ type waitable interface {
 
 func (cmd *command) LocalPrepare(arg ...string) (*exec.Cmd) {
 
-	lcmd := exec.Command(cmd.Command, arg...)
+	var lcmd *exec.Cmd
+
+	if (strings.Contains(cmd.Command,"|")) {
+		// simple command piping
+		c := strings.Join(arg," ")
+		lcmd = exec.Command("sh", "-c", cmd.Command+" "+c)
+	} else {
+		lcmd = exec.Command(cmd.Command, arg...)
+	}
 
 	if cmd.Stdout == nil {
 		lcmd.Stdout = &cmd.stdout
@@ -62,12 +70,13 @@ func (c *command) Run(arg ...string) ([][]string, error) {
 	c.Path = c.Command+" "+joinedArgs
 	c.Env = []string{"LC_CTYPE=C", "LANG=en_US.UTF-8"}
 	id := uuid.New()
-	logger.Log([]string{"ID:" + id, "START", c.Path})
 	if (c.zh.Local) {
+		logger.Log([]string{"LOCAL:" + id, "START", c.Path})
 		lcmd := c.LocalPrepare(arg...)
 		err = lcmd.Start()
 		cmd = lcmd
 	} else {
+		logger.Log([]string{"REMOTE:" + id, "START", c.Path})
 		err, session = c.StartCommand()
 		if (session != nil) {
 			defer func() {
