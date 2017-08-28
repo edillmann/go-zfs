@@ -160,6 +160,7 @@ func (ds *Dataset) parseLine(line []string) error {
 	if runtime.GOOS != "solaris" {
 		setString(&ds.Written, line[9])
 		setString(&ds.Logicalused, line[10])
+		setString(&ds.ReceiveResumeToken, line[11])
 	}
 	return nil
 }
