@@ -160,6 +160,7 @@ func (ds *Dataset) parseLine(line []string) error {
 	if runtime.GOOS != "solaris" {
 		setString(&ds.Written, line[9])
 		setString(&ds.Logicalused, line[10])
+		setString(&ds.ReceiveResumeToken, line[11])
 	}
 	return nil
 }
@@ -312,7 +313,7 @@ func parseInodeChanges(lines [][]string) ([]*InodeChange, error) {
 func (z *ZfsH) listByType(t, filter string, depth int, recurse bool) ([]*Dataset, error) {
 	args := []string{"list", "-H", "-t", t, "-o", strings.Join(DsPropList, ",")}
 
-	if depth > 0 {
+	if depth > -1 {
 		args = append(args, "-d", strconv.Itoa(depth))
 	}
 

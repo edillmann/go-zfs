@@ -39,6 +39,7 @@ type Dataset struct {
 	Volsize     string
 	Logicalused string
 	Quota       string
+	ReceiveResumeToken string
 }
 
 // InodeType is the type of inode as reported by Diff
@@ -86,11 +87,12 @@ type SendFlag int
 
 const (
 	SendDefault	       SendFlag = 1 << iota
-	SendIncremental 		= 1 << iota
-	SendRecursive 			= 1 << iota
-	SendIntermediate 		= 1 << iota
+	SendIncremental 	= 1 << iota
+	SendRecursive 		= 1 << iota
+	SendIntermediate 	= 1 << iota
 	SendLz4		 		= 1 << iota
-	SendEmbeddedData		= 1 << iota
+	SendEmbeddedData	= 1 << iota
+	SendWithToken 		= 1 << iota
 )
 
 // InodeChange represents a change as reported by Diff
@@ -324,8 +326,13 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string) (*Datas
 	if uncompress != "" {
 		c.Command = uncompress+"|zfs"
 	}
+	args := make([]string, 1,5)
+	args[0] = "receive"
+	// resumable receive
+	args = append(args, "-s")
+	args = append(args, name)
 
-	_, err := c.Run("receive", name)
+	_, err := c.Run(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +344,7 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string) (*Datas
 // ds0 source snapshot
 // ds1 previous snapshot used when sendflags is SendIncremental
 // compression prog to pipe through if != "" (ex. lzop)
-func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFlag, compress string) error {
+func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFlag, compress, token string) error {
 	if !strings.ContainsAny(ds0, "@") {
 		return errors.New("can only send snapshots")
 	}
@@ -357,6 +364,11 @@ func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFla
 
 	if sendflags&SendLz4 != 0 {
 		args = append(args, "-c")
+	}
+
+	if sendflags&SendWithToken != 0 {
+		args = append(args, "-t")
+		args = append(args, token)
 	}
 
 	if sendflags&SendEmbeddedData != 0 {
