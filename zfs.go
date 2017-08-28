@@ -344,8 +344,8 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string) (*Datas
 // ds0 source snapshot
 // ds1 previous snapshot used when sendflags is SendIncremental
 // compression prog to pipe through if != "" (ex. lzop)
-func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFlag, compress, token string) error {
-	if !strings.ContainsAny(ds0, "@") {
+func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFlag, compress string) error {
+	if sendflags&SendWithToken == 0 && !strings.ContainsAny(ds0, "@") {
 		return errors.New("can only send snapshots")
 	}
 
@@ -368,7 +368,6 @@ func (z *ZfsH) SendSnapshot(ds0, ds1 string, output io.Writer, sendflags SendFla
 
 	if sendflags&SendWithToken != 0 {
 		args = append(args, "-t")
-		args = append(args, token)
 	}
 
 	if sendflags&SendEmbeddedData != 0 {
