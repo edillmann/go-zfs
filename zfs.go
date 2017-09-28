@@ -318,7 +318,7 @@ func (z *ZfsH) Mount(d *Dataset, overlay bool, options []string) (*Dataset, erro
 // newly-created snapshot.
 // name destination dataset name
 // uncompress uncompress prog if != "" (ex. lzop -d)
-func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, node, uncompress string) (*Dataset, error) {
+func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string, props []string) (*Dataset, error) {
 
 	c := command{
 		Command: "zfs",
@@ -332,8 +332,12 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, node, uncompress string) (
 	args := make([]string, 1,5)
 	args[0] = "receive"
 	// resumable receive
-	args = append(args, "-o")
-	args = append(args, "zsync:from="+node)
+	for _,prop := range props {
+		if strings.Contains(prop,"=") {
+			args = append(args, "-o")
+			args = append(args, prop)
+		}
+	}
 	args = append(args, "-s")
 	args = append(args, name)
 
