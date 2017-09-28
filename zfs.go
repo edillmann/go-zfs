@@ -28,19 +28,22 @@ const (
 // The field definitions can be found in the ZFS manual:
 // http://www.freebsd.org/cgi/man.cgi?zfs(8).
 type Dataset struct {
-	Name        string
-	Origin      string
-	Used        string
-	Avail       string
-	Mountpoint  string
-	Compression string
-	Type        string
-	Written     string
-	Volsize     string
-	Logicalused string
-	Quota       string
+	Name               string
+	Origin             string
+	Used               string
+	Avail              string
+	Mountpoint         string
+	Compression        string
+	Type               string
+	Written            string
+	Volsize            string
+	Logicalused        string
+	Quota              string
 	ReceiveResumeToken string
+	Compressratio      string
+	Usedbysnapshots    string
 }
+
 
 // InodeType is the type of inode as reported by Diff
 type InodeType int
@@ -315,7 +318,7 @@ func (z *ZfsH) Mount(d *Dataset, overlay bool, options []string) (*Dataset, erro
 // newly-created snapshot.
 // name destination dataset name
 // uncompress uncompress prog if != "" (ex. lzop -d)
-func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string) (*Dataset, error) {
+func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, node, uncompress string) (*Dataset, error) {
 
 	c := command{
 		Command: "zfs",
@@ -329,6 +332,8 @@ func (z *ZfsH) ReceiveSnapshot(input io.Reader, name, uncompress string) (*Datas
 	args := make([]string, 1,5)
 	args[0] = "receive"
 	// resumable receive
+	args = append(args, "-o")
+	args = append(args, "zsync:from="+node)
 	args = append(args, "-s")
 	args = append(args, name)
 
@@ -457,7 +462,7 @@ func (z *ZfsH) SetProperty(d *Dataset, key, val string) error {
 // A full list of available ZFS properties may be found here:
 // https://www.freebsd.org/cgi/man.cgi?zfs(8).
 func (z *ZfsH) GetProperty(d *Dataset, key string) (string, error) {
-	out, err := z.zfs("get", key, d.Name)
+	out, err := z.zfs("get","-Hp", key, d.Name)
 	if err != nil {
 		return "", err
 	}
