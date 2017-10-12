@@ -169,9 +169,12 @@ func NewSSHHandle(host string, port int, username string, keyfile *string) *ZfsH
 	return zh;
 }
 
-func (d *Dataset) SnapshotName() string {
+func (d *Dataset) DataSetName() string {
 	if d.Type == DatasetSnapshot {
 		return strings.Split(d.Name, "@")[1]
+	}
+	if d.Type == DatasetBookmark {
+		return strings.Split(d.Name, "#")[1]
 	}
 	return ""
 }
@@ -499,6 +502,11 @@ func (z *ZfsH) Snapshots(d *Dataset, depth int) ([]*Dataset, error) {
 	return z.SnapshotsByName(d.Name, depth)
 }
 
+// Snapshots returns a slice of all ZFS snapshots of a given dataset.
+func (z *ZfsH) Bookmarks(d *Dataset, depth int) ([]*Dataset, error) {
+	return z.BookmarksByName(d.Name, depth)
+}
+
 // CreateFilesystem creates a new ZFS filesystem with the specified name and
 // properties.
 // A full list of available ZFS properties may be found here:
@@ -530,6 +538,25 @@ func (z *ZfsH) Snapshot(d *Dataset, name string, recursive bool) (*Dataset, erro
 	}
 	snapName := fmt.Sprintf("%s@%s", d.Name, name)
 	args = append(args, snapName)
+	_, err := z.zfs(args...)
+	if err != nil {
+		return nil, err
+	}
+	return z.GetDataset(snapName)
+}
+
+// Snapshot creates a new ZFS snapshot of the receiving dataset, using the
+// specified name.  Optionally, the snapshot can be taken recursively, creating
+// snapshots of all descendent filesystems in a single, atomic operation.
+func (z *ZfsH) Bookmark(d *Dataset, name string, recursive bool) (*Dataset, error) {
+	args := make([]string, 1, 4)
+	args[0] = "bookmark"
+	if recursive {
+		args = append(args, "-r")
+	}
+	snapName := fmt.Sprintf("%s@%s", d.Name, name)
+	bookMarkName := fmt.Sprintf("%s#%s", d.Name, name)
+	args = append(args, snapName, bookMarkName)
 	_, err := z.zfs(args...)
 	if err != nil {
 		return nil, err
