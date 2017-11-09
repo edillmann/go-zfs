@@ -316,6 +316,19 @@ func (z *ZfsH) Mount(d *Dataset, overlay bool, options []string) (*Dataset, erro
 	return z.GetDataset(d.Name)
 }
 
+// Mount mounts ZFS file systems.
+func (z *ZfsH) AbortReceive(name string) (*Dataset, error) {
+	args := make([]string, 1, 5)
+	args[0] = "receive"
+	args = append(args, "-A")
+	args = append(args, name)
+	_, err := z.zfs(args...)
+	if err != nil {
+		return nil, err
+	}
+	return z.GetDataset(name)
+}
+
 // ReceiveSnapshot receives a ZFS stream from the input io.Reader, creates a
 // new snapshot with the specified name, and streams the input data into the
 // newly-created snapshot.
